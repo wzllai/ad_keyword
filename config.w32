@@ -1,0 +1,13 @@
+// $Id$
+// vim:ft=javascript
+
+// If your extension references something external, use ARG_WITH
+// ARG_WITH("ad_keyword", "for ad_keyword support", "no");
+
+// Otherwise, use ARG_ENABLE
+// ARG_ENABLE("ad_keyword", "enable ad_keyword support", "no");
+
+if (PHP_AD_KEYWORD != "no") {
+	EXTENSION("ad_keyword", "ad_keyword.c");
+}
+
