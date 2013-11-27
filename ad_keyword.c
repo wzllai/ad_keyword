@@ -21,7 +21,6 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-
 #include "php.h"
 #include "php_ini.h"
 #include "ext/standard/info.h"
@@ -33,6 +32,10 @@ ZEND_DECLARE_MODULE_GLOBALS(ad_keyword)
 
 /* True global resources - no need for thread safety here */
 static int le_ad_keyword;
+static char *ad_substr(const char *str, int start, int end);
+static char **ad_splite_str(char *str, int str_len, int pos[], int pos_len, int *len);
+static hash_code(const char *str, int len);
+static int hash_size(int pattern_size);
 
 /* {{{ ad_keyword_functions[]
  *
@@ -40,6 +43,7 @@ static int le_ad_keyword;
  */
 const zend_function_entry ad_keyword_functions[] = {
 	PHP_FE(ad_keywords,	NULL)		/* For testing, remove later. */
+  PHP_FE(ad_wrapper, NULL)
 	PHP_FE_END	/* Must be the last line in ad_keyword_functions[] */
 };
 /* }}} */
@@ -226,6 +230,61 @@ static ad_keyword_globals_dctor(zend_ad_keyword_globals *ad_keyword_globals TSRM
   pefree(hash_table, 1);
 }
 
+static char  **ad_splite_str(char *str, int str_len, int pos_arr[], int pos_len, int *len) {
+  int k = 1;
+  int i = 1;
+
+  for(;k<pos_len;k++) {
+    if (pos_arr[k] == 0) {
+      break;
+    }
+    if (k %2 == 0 && (pos_arr[k] < pos_arr[k-1])) {
+      pos_arr[k-1] = pos_arr[k] = 0;
+      k++;
+    } else {
+      i++;
+    }
+  }  
+  i++;
+  char **retval = emalloc(sizeof(char *) * i);
+  *len = i;
+  retval[0] = ad_substr(str, 0, pos_arr[0]-1);
+
+  int j = 1;
+  k = 0;
+  while(k < pos_len) {
+    int start = pos_arr[k]-1;
+    int m = 1;
+    int end;
+    while (pos_arr[k+m] == 0) {
+      m++;
+    }
+    k = k+m;
+    if (k >= pos_len) {
+      end = str_len;
+    } else {
+      end = pos_arr[k]-1;
+    }
+    retval[j] = ad_substr(str, start, end);
+    j++;
+  }  
+  return retval;
+}
+
+static char *ad_substr(const char *str, int start, int end) {
+  if (end <= start) {
+    return NULL;
+  }
+  int len = end - start;
+  int i = 0;
+  char sub[len+1];
+  while(i < len) {
+    sub[i] = str[start+i];
+    i++;
+  }
+  sub[len] = '\0';
+  return estrdup(sub);
+}
 
 /* }}} */
 
@@ -286,9 +345,6 @@ PHP_MINFO_FUNCTION(ad_keyword)
 	php_info_print_table_header(2, "ad_keyword support", "enabled");
 	php_info_print_table_end();
   DISPLAY_INI_ENTRIES();
-	/* Remove comments if you have entries in php.ini
-	DISPLAY_INI_ENTRIES();
-	*/
 }
 /* }}} */
 
@@ -344,7 +400,6 @@ PHP_FUNCTION(ad_keywords)
   while (index < content_len) {
     int blockHash = hash_code(content + index - blockMaxIndex, WU_MBLOCK);
     blockHash = blockHash % table_size;
-
     int shift = shift_hash_table[blockHash];
       if (shift > 0) {
           index = index + shift;
@@ -367,6 +422,8 @@ PHP_FUNCTION(ad_keywords)
             }
             // match succeed since we reach the end of the pattern.
             if ('\0' == *indexPattern) {
+              int last = index + strlen(patterns[list->id]);
+              printf("index:%d, %d,%s,%s\n", index, last,indexTarget, indexPattern);
               int is_unique = 1;
               if (mode == AD_PATTERN_UNIQUE) {
                 zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(arr), &pos);
@@ -394,6 +451,114 @@ PHP_FUNCTION(ad_keywords)
     }
     RETURN_ZVAL(arr, 1, 1);
 }
+
+PHP_FUNCTION(ad_wrapper)
+{
+  char *content = NULL;
+  int content_len = 0;
+  char *lef_delimiter = NULL;
+  char *right_delimiter = NULL;  
+  int lef_delimiter_len;
+  int right_delimiter_len;
+  long mode = AD_PATTERN_UNIQUE; 
+  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sss", &content, &content_len, &lef_delimiter, &lef_delimiter_len, &right_delimiter, &right_delimiter_len) == FAILURE) {
+    return;
+  }
+  if (!content_len) {
+    RETURN_NULL();
+  }
+
+  int size;
+  int table_size;
+  size = AD_KEYWORD_G(pattern_size);
+  table_size = AD_KEYWORD_G(table_size);
+  if (size == 0 || table_size == 0) {
+      RETURN_NULL();
+  }
+
+  char **patterns;
+  int *shift_hash_table;
+  ad_hash_pair **hash_table;
+  patterns = AD_KEYWORD_G(patterns);
+  shift_hash_table = AD_KEYWORD_G(shift_hash_table);
+  hash_table = AD_KEYWORD_G(hash_table);
+
+  int index = WU_MMIN - 1; // start off by matching end of largest common pattern
+  int blockMaxIndex = WU_MBLOCK - 1;
+  int windowMaxIndex = WU_MMIN - 1;
+
+  int pos_arr[60] = {0};//todo:resize pos_arr
+  int pos_len = 60;
+  int pos = 0;
+  while (index < content_len) {
+    int blockHash = hash_code(content + index - blockMaxIndex, WU_MBLOCK);
+    blockHash = blockHash % table_size;
+
+    int shift = shift_hash_table[blockHash];
+      if (shift > 0) {
+          index = index + shift;
+      } else {
+        int prefixHash = hash_code(content + index - windowMaxIndex, WU_MBLOCK);
+        ad_hash_pair *list = hash_table[blockHash];
+        while (list) {
+          if (prefixHash == list->prefix_hash) {
+            const char* indexTarget = content + index - windowMaxIndex;    //+mBlock
+            const char* indexPattern = patterns[list->id]; //+mBlock  
+            while (('\0' != *indexTarget) && ('\0' != *indexPattern)){
+            // match until we reach end of either string
+              if (*indexTarget == *indexPattern){
+                  // match against chosen case sensitivity
+                  ++indexTarget;
+                  ++indexPattern;
+              } else {
+                  break;
+              }
+            }
+            // match succeed since we reach the end of the pattern.
+            if ('\0' == *indexPattern) {
+              //mark target postion
+              pos_arr[pos++] = index;
+              pos_arr[pos++] = index + strlen(patterns[list->id]);
+              //printf("%d, %d\n", index, index + strlen(patterns[list->id]));
+
+            }                               
+          }
+              list = list->next;        
+        }
+        index++;
+      }    
+    }
+
+    if (pos_arr[0] == 0) {
+      RETURN_STRING(content, 1);
+    }
+
+    char **splite_arr = NULL;
+    int splitel_len = 0;
+    int i = 0;
+
+    splite_arr = ad_splite_str(content, content_len, pos_arr, pos_len,  &splitel_len);
+    int ret_len = content_len + (lef_delimiter_len + right_delimiter_len + 2 ) * ceil(splitel_len/2) + splitel_len;
+    char ret[ret_len];
+    memset(ret, 0, ret_len);
+    for(i; i<splitel_len; i++){
+      if (splite_arr[i] == NULL) {
+        continue;
+      }
+      if (i % 2 == 0) { 
+        strcat(ret, splite_arr[i]);
+      } else {
+        strcat(ret, lef_delimiter);
+        strcat(ret, splite_arr[i]);
+        strcat(ret, right_delimiter);
+      }
+      efree(splite_arr[i]);
+    }
+    efree(splite_arr);
+    RETURN_STRING(ret, 1);
+}
+
+
 /* }}} */
 /* The previous line is meant for vim and emacs, so it can correctly fold and 
    unfold functions in source code. See the corresponding marks just before 

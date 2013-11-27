@@ -47,7 +47,9 @@ PHP_RINIT_FUNCTION(ad_keyword);
 PHP_RSHUTDOWN_FUNCTION(ad_keyword);
 PHP_MINFO_FUNCTION(ad_keyword);
 
+
 PHP_FUNCTION(ad_keywords);	/* For testing, remove later. */
+PHP_FUNCTION(ad_wrapper);
 struct _ad_hash_pair {
   int prefix_hash;
   int id;
