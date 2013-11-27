@@ -39,7 +39,7 @@ extern zend_module_entry ad_keyword_module_entry;
 #define AD_PATTERN_ALL  1
 #define AD_PATTERN_UNIQUE 2
 #define WU_MMIN 2
-#define WU_MBLOCK 1
+#define WU_MBLOCK 2
 
 PHP_MINIT_FUNCTION(ad_keyword);
 PHP_MSHUTDOWN_FUNCTION(ad_keyword);
