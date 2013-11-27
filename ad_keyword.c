@@ -487,7 +487,7 @@ PHP_FUNCTION(ad_wrapper)
   int blockMaxIndex = WU_MBLOCK - 1;
   int windowMaxIndex = WU_MMIN - 1;
 
-  int pos_arr[60] = {0};//todo:resize pos_arr
+  int pos_arr[60] = {0};
   int pos_len = 60;
   int pos = 0;
   while (index < content_len) {
@@ -517,6 +517,9 @@ PHP_FUNCTION(ad_wrapper)
             // match succeed since we reach the end of the pattern.
             if ('\0' == *indexPattern) {
               //mark target postion
+              if (pos >= pos_len) {
+                continue;//todo:resize pos_arr
+              }
               pos_arr[pos++] = index;
               pos_arr[pos++] = index + strlen(patterns[list->id]);
               //printf("%d, %d\n", index, index + strlen(patterns[list->id]));
