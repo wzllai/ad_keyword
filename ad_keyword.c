@@ -423,7 +423,7 @@ PHP_FUNCTION(ad_keywords)
             // match succeed since we reach the end of the pattern.
             if ('\0' == *indexPattern) {
               int last = index + strlen(patterns[list->id]);
-              printf("index:%d, %d,%s,%s\n", index, last,indexTarget, indexPattern);
+              //printf("index:%d, %d,%s,%s\n", index, last,indexTarget, indexPattern);
               int is_unique = 1;
               if (mode == AD_PATTERN_UNIQUE) {
                 zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(arr), &pos);
