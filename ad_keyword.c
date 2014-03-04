@@ -150,6 +150,10 @@ static ad_keyword_globals_ctor(zend_ad_keyword_globals *ad_keyword_globals TSRML
 		  pattern_size++;
     } 
 	}
+  if (0 == pattern_size)
+    zend_error(E_WARNING, "ad_keyword_module|pattern keywords file is null.");
+    return 1;
+  }
   char **patterns = pemalloc(pattern_size * sizeof(char*), 1);
   rewind(fp);
   while (fgets(buffer, 60, fp)) {
